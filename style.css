@@ -1,3 +1,7 @@
+:root {
+  color-scheme: dark; /* dark native scrollbars and form controls */
+}
+
 html, body {
   margin: 0;
   height: 100%;
