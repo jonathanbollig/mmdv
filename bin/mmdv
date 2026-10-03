@@ -1,0 +1,5 @@
+#!/bin/sh
+# Launcher: runs mmdv on the system Electron. Works through a symlink.
+dir=$(dirname "$(dirname "$(readlink -f "$0")")")
+[ -f "$dir/dist/renderer.js" ] || (cd "$dir" && npm run build >/dev/null) || exit 1
+exec electron44 "$dir" "$@"

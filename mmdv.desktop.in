@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=mmdv
+GenericName=Markdown Editor
+Comment=Minimal Obsidian-style markdown editor
+Exec=@BIN@ %F
+Icon=text-markdown
+Terminal=false
+MimeType=text/markdown;text/x-markdown;
+Categories=Utility;TextEditor;
+StartupWMClass=mmdv
