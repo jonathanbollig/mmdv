@@ -8,3 +8,12 @@ html, body {
   background: #1e1e23;
   overflow: hidden;
 }
+
+/* Thin scrollbar, visible only while the pointer is over the editor. */
+.cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.cm-scroller:hover {
+  scrollbar-color: #4a4a56 transparent;
+}
