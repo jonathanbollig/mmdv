@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "description": "Minimal Obsidian-style live-preview markdown editor",
   "main": "main.js",
+  "author": "Jonathan Bollig (https://github.com/jonathanbollig)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jonathanbollig/mmdv.git"
+  },
   "scripts": {
     "build": "esbuild src/editor.js --bundle --minify --format=iife --target=chrome140 --outfile=dist/renderer.js",
     "start": "npm run build && electron44 ."
