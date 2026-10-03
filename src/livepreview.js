@@ -71,6 +71,29 @@ class LabelWidget extends WidgetType {
   }
 }
 
+const copyIcon = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5h-5a1.5 1.5 0 0 0-1.5 1.5v5a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>'
+const checkIcon = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.5l3.2 3L13 4.5"/></svg>'
+
+class CopyWidget extends WidgetType {
+  constructor(code) { super(); this.code = code }
+  eq(other) { return other.code === this.code }
+  toDOM() {
+    const btn = document.createElement('button')
+    btn.className = 'cm-code-copy'
+    btn.title = 'Copy code'
+    btn.innerHTML = copyIcon
+    btn.addEventListener('mousedown', e => {
+      e.preventDefault()
+      navigator.clipboard.writeText(this.code).then(() => {
+        btn.innerHTML = checkIcon
+        setTimeout(() => { btn.innerHTML = copyIcon }, 1200)
+      })
+    })
+    return btn
+  }
+  ignoreEvent() { return true }
+}
+
 function resolveImage(src, dir) {
   src = src.replace(/^<|>$/g, '')
   if (/^[a-z][a-z0-9+.-]*:/i.test(src)) return src
@@ -110,6 +133,16 @@ function buildDecorations(view) {
   }
   const eachLine = (from, to, fn) => {
     for (let n = doc.lineAt(from).number, last = doc.lineAt(to).number; n <= last; n++) fn(doc.line(n), n === last)
+  }
+
+  // Text of lines a..b with the block's indentation (a string prefix or a regex) removed.
+  const codeText = (a, b, indent) => {
+    const lines = []
+    for (let n = a; n <= b; n++) {
+      const t = doc.line(n).text
+      lines.push(typeof indent === 'string' ? (t.startsWith(indent) ? t.slice(indent.length) : t.trimStart()) : t.replace(indent, ''))
+    }
+    return lines.join('\n')
   }
 
   const fmEnd = frontmatterEnd(doc)
@@ -189,21 +222,26 @@ function buildDecorations(view) {
         if (!active) { add(lineDeco('cm-hr'), doc.lineAt(ref.from).from); hide(ref.from, ref.to) }
       } else if (name === 'FencedCode') {
         const first = doc.lineAt(ref.from), last = doc.lineAt(ref.to)
+        const closed = last.number > first.number && /^\s*(```|~~~)/.test(last.text)
+        const indent = /^\s*/.exec(first.text)[0]
+        add(Decoration.widget({ widget: new CopyWidget(codeText(first.number + 1, closed ? last.number - 1 : last.number, indent)), side: 1 }), first.to)
         eachLine(ref.from, ref.to, line => {
           let cls = 'cm-codeblock'
           if (line.number === first.number) cls += ' cm-codeblock-begin'
           if (line.number === last.number) cls += ' cm-codeblock-end'
-          if (!active && (line.number === first.number || (line.number === last.number && /^\s*(```|~~~)/.test(line.text))))
+          if (!active && (line.number === first.number || (line.number === last.number && closed)))
             cls += ' cm-fence'
           add(lineDeco(cls), line.from)
         })
         if (!active) {
           const info = node.getChild('CodeInfo')
           add(Decoration.replace({ widget: new LabelWidget(info ? text(info) : '') }), first.from, first.to)
-          if (last.number > first.number && /^\s*(```|~~~)/.test(last.text)) hide(last.from, last.to)
+          if (closed) hide(last.from, last.to)
         }
         return false
       } else if (name === 'CodeBlock') {
+        const first = doc.lineAt(ref.from), last = doc.lineAt(ref.to)
+        add(Decoration.widget({ widget: new CopyWidget(codeText(first.number, last.number, /^( {1,4}|\t)/)), side: 1 }), first.to)
         eachLine(ref.from, ref.to, (line, last) => {
           add(lineDeco('cm-codeblock' + (line.from === doc.lineAt(ref.from).from ? ' cm-codeblock-begin' : '') + (last ? ' cm-codeblock-end' : '')), line.from)
         })

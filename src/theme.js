@@ -54,10 +54,16 @@ export const theme = EditorView.theme({
   '.cm-table': { fontFamily: mono, fontSize: '0.9em' },
 
   '.cm-codeblock': { fontFamily: mono, fontSize: '0.88em', backgroundColor: c.code, padding: '0 16px' },
-  '.cm-codeblock-begin': { borderTopLeftRadius: '6px', borderTopRightRadius: '6px', paddingTop: '4px' },
+  '.cm-codeblock-begin': { borderTopLeftRadius: '6px', borderTopRightRadius: '6px', paddingTop: '4px', position: 'relative' },
   '.cm-codeblock-end': { borderBottomLeftRadius: '6px', borderBottomRightRadius: '6px', paddingBottom: '4px' },
   '.cm-fence': { fontSize: '0.7em', lineHeight: '1.2' },
   '.cm-code-lang': { color: c.dim },
+  '.cm-code-copy': {
+    position: 'absolute', right: '8px', top: '6px', zIndex: '1',
+    display: 'flex', padding: '4px', border: 'none', borderRadius: '4px',
+    background: 'transparent', color: c.dim, cursor: 'pointer', opacity: '0.6',
+  },
+  '.cm-code-copy:hover': { opacity: '1', color: c.fg, backgroundColor: 'rgba(255, 255, 255, 0.08)' },
 
   '.cm-panels': { backgroundColor: c.panel, color: c.fg },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid #34343c' },
