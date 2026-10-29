@@ -20,6 +20,7 @@ It's about 600 lines of code: [CodeMirror 6](https://codemirror.net/) for the ed
 - `[[wiki links]]` are styled with their brackets hidden (not clickable yet)
 - Search (Ctrl+F), undo/redo and normal keyboard behaviour (e.g. Ctrl+Backspace deletes a word)
 - Ctrl+S saves; you get a warning if you close with unsaved changes
+- Zoom with Ctrl +/- (Ctrl+0 resets), Ctrl+mouse wheel or touchpad pinch
 - Dark theme with a centred, readable line width
 
 ## Requirements
