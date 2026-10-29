@@ -36,6 +36,14 @@ export const theme = EditorView.theme({
   '.cm-h4': { fontSize: '1.15em' },
   '.cm-h5': { fontSize: '1.05em' },
   '.cm-h6': { fontSize: '1em', color: c.fg },
+  '.cm-fold-toggle': {
+    position: 'absolute', transform: 'translateX(-130%)', display: 'inline-flex', alignItems: 'center', height: '1.3em',
+    color: c.dim, cursor: 'pointer', opacity: '0', transition: 'opacity 0.15s',
+  },
+  '.cm-fold-toggle svg': { width: '0.7em', height: '0.7em', minWidth: '12px', minHeight: '12px' },
+  '.cm-fold-toggle.cm-folded svg': { transform: 'rotate(-90deg)' },
+  '.cm-line:hover .cm-fold-toggle, .cm-fold-toggle.cm-folded': { opacity: '1' },
+  '.cm-fold-toggle:hover': { color: c.fg },
 
   '.cm-link': { color: c.link, textDecoration: 'underline', textDecorationColor: '#8ab4f866', textUnderlineOffset: '3px' },
   '.cm-inline-code': { fontFamily: mono, fontSize: '0.88em', backgroundColor: c.code, borderRadius: '4px', padding: '0.1em 0.3em' },

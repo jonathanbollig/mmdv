@@ -2,7 +2,7 @@
 // except on the lines the selection touches.
 import { Decoration, ViewPlugin, WidgetType, EditorView } from '@codemirror/view'
 import { StateField, StateEffect } from '@codemirror/state'
-import { syntaxTree, foldEffect } from '@codemirror/language'
+import { syntaxTree, foldEffect, unfoldEffect, foldable, foldedRanges } from '@codemirror/language'
 
 // Folder of the open file, used to resolve relative image paths.
 export const baseDir = StateEffect.define()
@@ -71,6 +71,35 @@ class LabelWidget extends WidgetType {
   }
 }
 
+// Chevron left of a heading: folds or unfolds its section.
+class FoldWidget extends WidgetType {
+  constructor(folded) { super(); this.folded = folded }
+  eq(other) { return other.folded === this.folded }
+  toDOM(view) {
+    const el = document.createElement('span')
+    el.className = 'cm-fold-toggle' + (this.folded ? ' cm-folded' : '')
+    el.innerHTML = chevronIcon
+    el.title = this.folded ? 'Unfold section' : 'Fold section'
+    el.addEventListener('mousedown', e => {
+      e.preventDefault()
+      const line = view.state.doc.lineAt(view.posAtDOM(el))
+      const folded = foldedAt(view.state, line.to)
+      if (folded) return view.dispatch({ effects: unfoldEffect.of(folded) })
+      const range = foldable(view.state, line.from, line.to)
+      if (range) view.dispatch({ effects: foldEffect.of(range) })
+    })
+    return el
+  }
+  ignoreEvent() { return true }
+}
+
+function foldedAt(state, pos) {
+  let found = null
+  foldedRanges(state).between(pos, pos, (from, to) => { if (from === pos) found = { from, to } })
+  return found
+}
+
+const chevronIcon = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6l4 4 4-4"/></svg>'
 const copyIcon = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5h-5a1.5 1.5 0 0 0-1.5 1.5v5a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>'
 const checkIcon = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.5l3.2 3L13 4.5"/></svg>'
 
@@ -159,12 +188,13 @@ function buildDecorations(view) {
       const active = isActive(ref.from, ref.to)
 
       let m
-      if ((m = /^ATXHeading(\d)$/.exec(name))) {
-        add(lineDeco(`cm-h cm-h${m[1]}`), doc.lineAt(ref.from).from)
-      } else if ((m = /^SetextHeading(\d)$/.exec(name))) {
-        eachLine(ref.from, ref.to, (line, last) => {
-          if (!last) add(lineDeco(`cm-h cm-h${m[1]}`), line.from)
-        })
+      if ((m = /^(ATX|Setext)Heading(\d)$/.exec(name))) {
+        const line = doc.lineAt(ref.from)
+        if (m[1] === 'ATX') add(lineDeco(`cm-h cm-h${m[2]}`), line.from)
+        else eachLine(ref.from, ref.to, (l, last) => { if (!last) add(lineDeco(`cm-h cm-h${m[2]}`), l.from) })
+        const folded = !!foldedAt(state, line.to)
+        if (folded || foldable(state, line.from, line.to))
+          add(Decoration.widget({ widget: new FoldWidget(folded), side: -1 }), line.from)
       } else if (name === 'HeaderMark') {
         if (active) return
         if (parent?.startsWith('Setext')) return hide(ref.from, ref.to)
@@ -264,6 +294,19 @@ function buildDecorations(view) {
   return Decoration.set(decos, true)
 }
 
+// Fold placeholder: "frontmatter" for the YAML block, "…" for a heading's section.
+export const foldPlaceholder = {
+  preparePlaceholder: (state, range) => range.from < frontmatterEnd(state.doc) ? 'frontmatter' : '…',
+  placeholderDOM(view, onclick, label) {
+    const el = document.createElement('span')
+    el.className = 'cm-foldPlaceholder'
+    el.textContent = label
+    el.title = 'Unfold'
+    el.onclick = onclick
+    return el
+  },
+}
+
 // Frontmatter folded away on open; click the placeholder to unfold.
 export function foldFrontmatter(view) {
   const end = frontmatterEnd(view.state.doc)
@@ -275,6 +318,7 @@ const previewPlugin = ViewPlugin.fromClass(class {
   update(u) {
     if (u.docChanged || u.viewportChanged || u.selectionSet ||
         syntaxTree(u.startState) !== syntaxTree(u.state) ||
+        foldedRanges(u.startState) !== foldedRanges(u.state) ||
         u.startState.field(dirField) !== u.state.field(dirField))
       this.decorations = buildDecorations(u.view)
   }

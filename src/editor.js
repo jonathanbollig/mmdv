@@ -4,9 +4,9 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
-import { indentUnit, codeFolding } from '@codemirror/language'
+import { indentUnit, codeFolding, foldKeymap } from '@codemirror/language'
 import { theme, highlighting } from './theme.js'
-import { livePreview, baseDir, foldFrontmatter } from './livepreview.js'
+import { livePreview, baseDir, foldFrontmatter, foldPlaceholder } from './livepreview.js'
 
 async function main() {
   const file = await window.mmdv.open()
@@ -41,10 +41,10 @@ async function main() {
         highlightSelectionMatches(),
         EditorView.lineWrapping,
         indentUnit.of('\t'),
-        codeFolding({ placeholderText: 'frontmatter' }),
+        codeFolding(foldPlaceholder),
         keymap.of([
           { key: 'Mod-s', run: view => { save(view); return true } },
-          ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab,
+          ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap, indentWithTab,
         ]),
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         theme,

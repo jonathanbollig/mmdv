@@ -16,6 +16,7 @@ It's about 600 lines of code: [CodeMirror 6](https://codemirror.net/) for the ed
 - Fenced code blocks with syntax highlighting and a copy button
 - Inline images (relative paths are resolved from the file's folder)
 - YAML frontmatter folded away by default
+- Collapsible headings: hover a heading and click the chevron to fold its section (Ctrl+Shift+[ / ] at the cursor, Ctrl+Alt+[ / ] for all)
 - Ctrl+click opens links in your default browser
 - `[[wiki links]]` are styled with their brackets hidden (not clickable yet)
 - Search (Ctrl+F), undo/redo and normal keyboard behaviour (e.g. Ctrl+Backspace deletes a word)
