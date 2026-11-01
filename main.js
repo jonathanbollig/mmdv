@@ -46,6 +46,19 @@ function createWindow(filePath) {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', e => e.preventDefault())
 
+  // Right-click menu: clipboard plus markdown commands handled by the renderer.
+  win.webContents.on('context-menu', (e, params) => {
+    const f = params.editFlags
+    Menu.buildFromTemplate([
+      { role: 'cut', enabled: f.canCut },
+      { role: 'copy', enabled: f.canCopy },
+      { role: 'paste', enabled: f.canPaste },
+      { type: 'separator' },
+      { label: 'Toggle Quote', accelerator: 'Ctrl+Shift+Q', registerAccelerator: false,
+        click: () => win.webContents.send('toggle-quote') },
+    ]).popup({ window: win })
+  })
+
   win.loadFile(path.join(__dirname, 'index.html'))
   return win
 }

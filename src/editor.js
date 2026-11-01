@@ -8,6 +8,34 @@ import { indentUnit, codeFolding, foldKeymap } from '@codemirror/language'
 import { theme, highlighting } from './theme.js'
 import { livePreview, baseDir, foldFrontmatter, foldPlaceholder } from './livepreview.js'
 
+// Ctrl+Shift+Q (or the context menu): turn the selected lines into a blockquote,
+// or unquote them if they all are quoted already. Blank lines get a bare `>`
+// so the quote stays one block.
+function toggleQuote(view) {
+  const { state } = view
+  const lines = new Map()
+  for (const r of state.selection.ranges) {
+    for (let pos = r.from; ;) {
+      const line = state.doc.lineAt(pos)
+      lines.set(line.number, line)
+      if (line.to >= r.to) break
+      pos = line.to + 1
+    }
+  }
+  const all = [...lines.values()]
+  const quoted = all.every(l => /^\s*>/.test(l.text) || !l.text.trim())
+    && all.some(l => /^\s*>/.test(l.text))
+  const changes = all.map(l => {
+    if (quoted) {
+      const m = /^(\s*)> ?/.exec(l.text)
+      return m ? { from: l.from + m[1].length, to: l.from + m[0].length } : null
+    }
+    return { from: l.from, insert: l.text.trim() ? '> ' : '>' }
+  }).filter(Boolean)
+  view.dispatch({ changes, scrollIntoView: true, userEvent: 'input' })
+  return true
+}
+
 async function main() {
   const file = await window.mmdv.open()
   const crlf = file.text.includes('\r\n')
@@ -44,6 +72,7 @@ async function main() {
         codeFolding(foldPlaceholder),
         keymap.of([
           { key: 'Mod-s', run: view => { save(view); return true } },
+          { key: 'Mod-Shift-q', run: toggleQuote },
           ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap, indentWithTab,
         ]),
         markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -78,6 +107,7 @@ async function main() {
   })
 
   window.mmdv.onSaveRequest(() => save(view))
+  window.mmdv.onToggleQuote(() => { toggleQuote(view); view.focus() })
 
   window.mmdv.onSaveAndClose(async () => {
     if (await save(view)) window.mmdv.close()
