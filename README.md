@@ -7,20 +7,24 @@ The following part is the summary by claude:
 
 **mmdv** is a small desktop app for opening loose `.md` files and editing them with inline live preview: markdown syntax is hidden and rendered as you type, and shown again on the line your cursor is on. No vault, no sidebar, no plugins. One file, one window.
 
-It's about 600 lines of code: [CodeMirror 6](https://codemirror.net/) for the editor, a thin [Electron](https://www.electronjs.org/) shell, bundled with esbuild. No UI framework.
+It's about 900 lines of code: [CodeMirror 6](https://codemirror.net/) for the editor, a thin [Electron](https://www.electronjs.org/) shell, bundled with esbuild. No UI framework.
 
 ## Features
 
-- Live preview for headings, **bold**, *italic*, ~~strikethrough~~, `inline code`, links, blockquotes and horizontal rules
+- Live preview for headings, **bold**, *italic*, ~~strikethrough~~, ==highlight==, `inline code`, links, blockquotes and horizontal rules
+- LaTeX math rendered with [KaTeX](https://katex.org/): `$inline$` and `$$display$$` blocks (a block being edited shows its rendering below the source)
+- Typing `` ` ``, `(`, `[`, `{`, `"`, `'`, `*`, `_`, `~`, `=`, `$` or `<` with text selected wraps the selection; press `*` twice for bold, `=` twice for highlight
 - Bullet, numbered and task lists, with clickable checkboxes
 - Fenced code blocks with syntax highlighting and a copy button
 - Inline images (relative paths are resolved from the file's folder)
+- Tables rendered as real tables, with column alignment; click a cell to edit the markdown
 - YAML frontmatter folded away by default
 - Collapsible headings: hover a heading and click the chevron to fold its section (Ctrl+Shift+[ / ] at the cursor, Ctrl+Alt+[ / ] for all)
 - Ctrl+click opens links in your default browser
 - `[[wiki links]]` are styled with their brackets hidden (not clickable yet)
 - Search (Ctrl+F), undo/redo and normal keyboard behaviour (e.g. Ctrl+Backspace deletes a word)
-- Ctrl+S saves; you get a warning if you close with unsaved changes
+- Auto saves a second after you stop typing, and on close; Ctrl+S saves right away. An untitled document is only saved with Ctrl+S, and closing it with unsaved changes warns you
+- Reloads the file when it changes on disk (asks first if you have unsaved edits)
 - Zoom with Ctrl +/- (Ctrl+0 resets), Ctrl+mouse wheel or touchpad pinch
 - Dark theme with a centred, readable line width
 
@@ -58,7 +62,7 @@ Several files open in separate windows. A path that doesn't exist yet is created
 
 ## Not yet supported
 
-Rendered tables (they're shown as styled monospace text), following wiki links, LaTeX math, callouts, an open-file dialog and reloading files changed on disk.
+Following wiki links, callouts and an open-file dialog.
 
 ## License
 

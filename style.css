@@ -9,6 +9,31 @@ html, body {
   overflow: hidden;
 }
 
+.cm-image, .cm-table-image {
+  cursor: zoom-in;
+}
+
+/* Full-window image viewer (src/lightbox.js). */
+.mmdv-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(20, 20, 24, 0.94);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.mmdv-lightbox:active {
+  cursor: grabbing;
+}
+.mmdv-lightbox img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  transform-origin: 0 0;
+}
+
 /* Thin scrollbar, visible only while the pointer is over the editor. */
 .cm-scroller {
   scrollbar-width: thin;

@@ -30,6 +30,8 @@ function createWindow(filePath) {
   win.on('close', e => {
     if (win.mmdv.forceClose || !win.mmdv.dirty) return
     e.preventDefault()
+    // Auto save is on for files that have a path: flush pending edits without asking.
+    if (win.mmdv.filePath) return win.webContents.send('save-and-close')
     const choice = dialog.showMessageBoxSync(win, {
       type: 'warning',
       message: `Save changes to ${displayName(win)}?`,
@@ -127,8 +129,10 @@ ipcMain.handle('open', e => {
   return { text, filePath, dir: filePath ? path.dirname(filePath) : process.cwd() }
 })
 
-ipcMain.handle('save', async (e, text) => {
+ipcMain.handle('save', async (e, text, auto) => {
   const win = senderWin(e)
+  // Never auto save over a file that changed on disk while the user decides what to keep.
+  if (auto && win.mmdv.asking) return null
   if (!win.mmdv.filePath) {
     const res = await dialog.showSaveDialog(win, {
       defaultPath: 'Untitled.md',
@@ -141,6 +145,21 @@ ipcMain.handle('save', async (e, text) => {
   fs.writeFileSync(win.mmdv.filePath, text, 'utf8')
   watch(win)
   return { filePath: win.mmdv.filePath, dir: path.dirname(win.mmdv.filePath) }
+})
+
+// Pasted image: write it next to the file, Obsidian-style name. Returns the file name.
+ipcMain.handle('save-image', (e, data, ext) => {
+  const win = senderWin(e)
+  if (!win.mmdv.filePath) return null
+  const dir = path.dirname(win.mmdv.filePath)
+  const d = new Date()
+  const stamp = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(v => String(v).padStart(2, '0')).join('')
+  for (let n = 0; ; n++) {
+    const name = `Pasted image ${stamp}${n ? ` ${n}` : ''}.${ext}`
+    try { fs.writeFileSync(path.join(dir, name), Buffer.from(data), { flag: 'wx' }); return name }
+    catch (err) { if (err.code !== 'EEXIST') throw err }
+  }
 })
 
 ipcMain.on('dirty', (e, dirty) => {

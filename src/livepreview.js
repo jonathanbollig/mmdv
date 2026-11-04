@@ -1,8 +1,11 @@
 // Obsidian-style live preview: markdown syntax is hidden and rendered,
 // except on the lines the selection touches.
-import { Decoration, ViewPlugin, WidgetType, EditorView } from '@codemirror/view'
-import { StateField, StateEffect } from '@codemirror/state'
+import { Decoration, ViewPlugin, WidgetType, EditorView, keymap } from '@codemirror/view'
+import { StateField, StateEffect, Prec } from '@codemirror/state'
 import { syntaxTree, foldEffect, unfoldEffect, foldable, foldedRanges } from '@codemirror/language'
+import katex from 'katex'
+import { openLightbox } from './lightbox.js'
+import 'katex/dist/katex.min.css'
 
 // Folder of the open file, used to resolve relative image paths.
 export const baseDir = StateEffect.define()
@@ -47,16 +50,73 @@ class CheckboxWidget extends WidgetType {
   ignoreEvent() { return true }
 }
 
+// Obsidian's size syntax in the alt text: `![caption|300](x.png)` or `|300x200`
+// (`\|300` inside tables, where a bare `|` would end the cell).
+function parseAlt(alt) {
+  const m = /^(.*?)\\?\|(\d+)(?:x(\d+))?$/.exec(alt)
+  return m ? { alt: m[1], width: +m[2], height: m[3] ? +m[3] : null } : { alt, width: null, height: null }
+}
+
+function sizeImage(img, { width, height }) {
+  img.style.width = width ? `${width}px` : ''
+  img.style.height = width && height ? `${height}px` : ''
+}
+
+// The Image node at a widget's position (replace widgets sit at its start,
+// cursor-line widgets right after its end).
+function imageAt(state, pos) {
+  for (const side of [1, -1]) {
+    for (let n = syntaxTree(state).resolveInner(pos, side); n; n = n.parent)
+      if (n.name === 'Image') return n
+  }
+  return null
+}
+
 class ImageWidget extends WidgetType {
   constructor(src, alt) { super(); this.src = src; this.alt = alt }
   eq(other) { return other.src === this.src && other.alt === this.alt }
   toDOM(view) {
-    const img = document.createElement('img')
+    const size = parseAlt(this.alt)
+    const wrap = document.createElement('span')
+    wrap.className = 'cm-image-wrap'
+    const img = wrap.appendChild(document.createElement('img'))
     img.className = 'cm-image'
     img.src = this.src
-    img.alt = img.title = this.alt
+    img.alt = img.title = size.alt
+    sizeImage(img, size)
     img.onload = img.onerror = () => view.requestMeasure()
-    return img
+    img.addEventListener('mousedown', e => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      openLightbox(img.src, img.alt)
+    })
+
+    // Corner handle: drag to resize, keeping the aspect ratio; on release the
+    // width is written into the alt text as `|width`.
+    const handle = wrap.appendChild(document.createElement('span'))
+    handle.className = 'cm-image-handle'
+    handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      handle.setPointerCapture(e.pointerId)
+      const startX = e.clientX, startW = img.getBoundingClientRect().width
+      const max = view.contentDOM.clientWidth
+      let width = Math.round(startW)
+      const move = e => {
+        width = Math.round(Math.min(max, Math.max(32, startW + e.clientX - startX)))
+        sizeImage(img, { width })
+      }
+      handle.addEventListener('pointermove', move)
+      handle.addEventListener('pointerup', () => {
+        handle.removeEventListener('pointermove', move)
+        const node = imageAt(view.state, view.posAtDOM(wrap))
+        const marks = node?.getChildren('LinkMark')
+        if (!marks || marks.length < 2) return
+        const insert = `${size.alt}|${width}`
+        view.dispatch({ changes: { from: marks[0].to, to: marks[1].from, insert } })
+      }, { once: true })
+    })
+    return wrap
   }
 }
 
@@ -69,6 +129,36 @@ class LabelWidget extends WidgetType {
     el.textContent = this.text
     return el
   }
+}
+
+// LaTeX rendered with KaTeX. Clicking it puts the cursor into the source.
+// Errors are shown in place (red) instead of throwing.
+class MathWidget extends WidgetType {
+  constructor(tex, display, quoted = false) { super(); this.tex = tex; this.display = display; this.quoted = quoted }
+  eq(other) { return other.tex === this.tex && other.display === this.display && other.quoted === this.quoted }
+  toDOM(view) {
+    const el = document.createElement(this.display ? 'div' : 'span')
+    el.className = this.display ? 'cm-math-block' + (this.quoted ? ' cm-quote' : '') : 'cm-math'
+    renderMath(el, this.tex, this.display)
+    el.addEventListener('mousedown', e => {
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: view.posAtDOM(el) } })
+      view.focus()
+    })
+    return el
+  }
+  ignoreEvent() { return true }
+}
+
+function renderMath(el, tex, display) {
+  katex.render(tex, el, { displayMode: display, throwOnError: false })
+}
+
+// TeX source of an InlineMath or BlockMath node (between its MathMarks).
+function mathSource(state, node) {
+  const marks = node.getChildren('MathMark')
+  const from = marks[0].to, to = marks.length > 1 ? marks[marks.length - 1].from : node.to
+  return state.sliceDoc(from, to).replace(/^[ \t]*>[ \t]?/gm, '').trim()
 }
 
 // Chevron left of a heading: folds or unfolds its section.
@@ -121,6 +211,129 @@ class CopyWidget extends WidgetType {
     return btn
   }
   ignoreEvent() { return true }
+}
+
+// A table rendered as HTML. Built from a plain description (see tableSpec), so the
+// DOM can be reused while the source is unchanged. Clicking a cell puts the cursor
+// there, which shows the raw markdown again; Ctrl+click on a link opens it.
+class TableWidget extends WidgetType {
+  constructor(spec, source) { super(); this.spec = spec; this.source = source }
+  eq(other) { return other.source === this.source }
+  toDOM(view) {
+    const wrap = document.createElement('div')
+    wrap.className = 'cm-table-widget'
+    const table = wrap.appendChild(document.createElement('table'))
+    const head = table.appendChild(document.createElement('thead'))
+    const body = table.appendChild(document.createElement('tbody'))
+    this.spec.rows.forEach((row, i) => {
+      const tr = (i ? body : head).appendChild(document.createElement('tr'))
+      row.forEach((cell, col) => {
+        const td = tr.appendChild(document.createElement(i ? 'td' : 'th'))
+        if (this.spec.align[col]) td.style.textAlign = this.spec.align[col]
+        td.dataset.offset = cell.offset
+        appendInline(td, cell.content)
+      })
+    })
+    wrap.addEventListener('mousedown', e => {
+      const link = e.target.closest('[data-href]')
+      if ((e.ctrlKey || e.metaKey) && link) {
+        e.preventDefault()
+        return window.mmdv.openExternal(link.dataset.href)
+      }
+      const img = e.target.closest('.cm-table-image')
+      if (img && !link && e.button === 0) {
+        e.preventDefault()
+        return openLightbox(img.src, img.alt)
+      }
+      const cell = e.target.closest('[data-offset]')
+      e.preventDefault()
+      const pos = view.posAtDOM(wrap) + (cell ? +cell.dataset.offset : 0)
+      view.dispatch({ selection: { anchor: pos } })
+      view.focus()
+    })
+    return wrap
+  }
+  ignoreEvent() { return true }
+}
+
+function appendInline(parent, items) {
+  for (const item of items) {
+    if (typeof item === 'string') { parent.append(item); continue }
+    const el = parent.appendChild(document.createElement(item.tag))
+    if (item.cls) el.className = item.cls
+    if (item.href) el.dataset.href = item.href
+    if (item.src) {
+      const size = parseAlt(item.alt)
+      el.src = item.src
+      el.alt = el.title = size.alt
+      sizeImage(el, size)
+    }
+    if (item.children) appendInline(el, item.children)
+    if (item.tex) renderMath(el, item.tex, false)
+  }
+}
+
+const inlineTags = { StrongEmphasis: 'strong', Emphasis: 'em', Strikethrough: 's', Highlight: 'mark' }
+const inlineMarks = new Set(['EmphasisMark', 'StrikethroughMark', 'HighlightMark', 'CodeMark', 'LinkMark', 'URL', 'LinkTitle', 'LinkLabel'])
+
+// Inline content of node between from and to, as strings and {tag, ...} items.
+function inlineSpec(state, node, from, to, dir) {
+  const out = []
+  let pos = from
+  for (let c = node.firstChild; c; c = c.nextSibling) {
+    if (c.from > pos) out.push(state.sliceDoc(pos, c.from))
+    pos = c.to
+    const text = state.sliceDoc(c.from, c.to)
+    if (inlineMarks.has(c.name)) continue
+    if (c.name === 'Escape') out.push(text.slice(1))
+    else if (inlineTags[c.name]) out.push({ tag: inlineTags[c.name], children: inlineSpec(state, c, c.from, c.to, dir) })
+    else if (c.name === 'InlineMath') out.push({ tag: 'span', cls: 'cm-math', tex: mathSource(state, c) })
+    else if (c.name === 'InlineCode') out.push({ tag: 'code', cls: 'cm-inline-code', children: inlineSpec(state, c, c.from, c.to, dir) })
+    else if (c.name === 'Link') {
+      const url = c.getChild('URL')
+      out.push({ tag: 'span', cls: 'cm-link', href: url && state.sliceDoc(url.from, url.to), children: inlineSpec(state, c, c.from, c.to, dir) })
+    } else if (c.name === 'Image') {
+      const url = c.getChild('URL'), marks = c.getChildren('LinkMark')
+      if (url && marks.length >= 2) out.push({ tag: 'img', cls: 'cm-table-image', src: resolveImage(state.sliceDoc(url.from, url.to), dir), alt: state.sliceDoc(marks[0].to, marks[1].from) })
+      else out.push(text)
+    } else out.push(...inlineSpec(state, c, c.from, c.to, dir))
+  }
+  if (to > pos) out.push(state.sliceDoc(pos, to))
+  return out
+}
+
+// Rows of cells (header first) and column alignments of a Table node.
+// Cells are split at the row's pipe delimiters, so empty cells are kept.
+function tableSpec(state, table, dir) {
+  const base = state.doc.lineAt(table.from).from
+  const rows = []
+  let align = []
+  for (let row = table.firstChild; row; row = row.nextSibling) {
+    const line = state.doc.lineAt(row.from)
+    if (row.name === 'TableDelimiter') {
+      align = line.text.trim().replace(/^\||\|$/g, '').split('|').map(s => {
+        s = s.trim()
+        return s.startsWith(':') && s.endsWith(':') ? 'center' : s.endsWith(':') ? 'right' : s.startsWith(':') ? 'left' : ''
+      })
+      continue
+    }
+    if (row.name !== 'TableHeader' && row.name !== 'TableRow') continue
+    const pipes = row.getChildren('TableDelimiter').map(d => d.from)
+    const bounds = [line.from + /^\s*/.exec(line.text)[0].length, ...pipes, line.to]
+    const cellNodes = row.getChildren('TableCell')
+    const cells = []
+    for (let i = 0; i + 1 < bounds.length; i++) {
+      const from = bounds[i] + (pipes.includes(bounds[i]) ? 1 : 0), to = bounds[i + 1]
+      if ((i === 0 || i === bounds.length - 2) && !state.sliceDoc(from, to).trim()) continue // outer pipes
+      const node = cellNodes.find(n => n.from >= from && n.to <= to)
+      cells.push({
+        offset: (node ? node.from : from) - base,
+        content: node ? inlineSpec(state, node, node.from, node.to, dir) : [],
+      })
+    }
+    rows.push(cells)
+  }
+  return { rows, align }
 }
 
 function resolveImage(src, dir) {
@@ -201,7 +414,16 @@ function buildDecorations(view) {
         const opening = node.parent.firstChild.from === ref.from
         if (opening) hide(ref.from, ref.to + (state.sliceDoc(ref.to, ref.to + 1) === ' ' ? 1 : 0))
         else hide(ref.from - (state.sliceDoc(ref.from - 1, ref.from) === ' ' ? 1 : 0), ref.to)
-      } else if (name === 'EmphasisMark' || name === 'StrikethroughMark') {
+      } else if (name === 'Highlight') {
+        add(markDeco('cm-highlight'), ref.from, ref.to)
+      } else if (name === 'InlineMath') {
+        if (active) add(markDeco('cm-math-src'), ref.from, ref.to)
+        else add(Decoration.replace({ widget: new MathWidget(mathSource(state, node), false) }), ref.from, ref.to)
+        return false
+      } else if (name === 'BlockMath') {
+        eachLine(ref.from, ref.to, line => add(lineDeco('cm-math-src'), line.from))
+        return false
+      } else if (name === 'EmphasisMark' || name === 'StrikethroughMark' || name === 'HighlightMark') {
         if (!active) hide(ref.from, ref.to)
       } else if (name === 'Escape') {
         if (!active) hide(ref.from, ref.from + 1)
@@ -324,6 +546,69 @@ const previewPlugin = ViewPlugin.fromClass(class {
   }
 }, { decorations: v => v.decorations })
 
+// Tables and $$ math blocks are block widgets, which a ViewPlugin may not provide,
+// so they live in a StateField. One the selection touches is left as raw markdown
+// (styled by buildDecorations); a math block being edited shows its rendering below.
+const containers = new Set(['Document', 'Blockquote', 'BulletList', 'OrderedList', 'ListItem'])
+
+function tableDecorations(state) {
+  const { doc } = state
+  const dir = state.field(dirField)
+  const fmEnd = frontmatterEnd(doc)
+  const decos = []
+  syntaxTree(state).iterate({
+    enter(ref) {
+      if (ref.name !== 'Table' && ref.name !== 'BlockMath') return containers.has(ref.name)
+      const from = doc.lineAt(ref.from).from, to = doc.lineAt(ref.to).to
+      if (from < fmEnd) return false
+      const active = state.selection.ranges.some(r => r.from <= to && r.to >= from)
+      if (ref.name === 'BlockMath') {
+        const quoted = ref.node.parent?.name === 'Blockquote'
+        const widget = new MathWidget(mathSource(state, ref.node), true, quoted)
+        if (active) decos.push(Decoration.widget({ widget, block: true, side: 1 }).range(to))
+        else decos.push(Decoration.replace({ widget, block: true }).range(from, to))
+      } else if (!active) {
+        const widget = new TableWidget(tableSpec(state, ref.node, dir), state.sliceDoc(from, to))
+        decos.push(Decoration.replace({ widget, block: true }).range(from, to))
+      }
+      return false
+    },
+  })
+  return Decoration.set(decos)
+}
+
+const tableField = StateField.define({
+  create: tableDecorations,
+  update(decos, tr) {
+    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
+        tr.startState.field(dirField) !== tr.state.field(dirField))
+      return tableDecorations(tr.state)
+    return decos
+  },
+  provide: f => EditorView.decorations.from(f),
+})
+
+// Up/Down would skip over a rendered table or math block; stop on its first (or last) line instead.
+const enterTable = forward => view => {
+  const sel = view.state.selection.main
+  if (!sel.empty) return false
+  const target = view.moveVertically(sel, forward).head
+  const lo = Math.min(sel.head, target), hi = Math.max(sel.head, target)
+  let hit = null
+  view.state.field(tableField).between(lo, hi, (from, to) => {
+    if (from === to || from < lo || to > hi) return // the preview under a math block being edited
+    hit = forward ? from : view.state.doc.lineAt(to).from
+    if (forward) return false
+  })
+  if (hit === null) return false
+  view.dispatch({ selection: { anchor: hit }, scrollIntoView: true })
+  return true
+}
+const tableKeys = Prec.high(keymap.of([
+  { key: 'ArrowDown', run: enterTable(true) },
+  { key: 'ArrowUp', run: enterTable(false) },
+]))
+
 // Ctrl+click on a link opens it in the default browser.
 const linkClicks = EditorView.domEventHandlers({
   mousedown(e) {
@@ -337,5 +622,5 @@ const linkClicks = EditorView.domEventHandlers({
 })
 
 export function livePreview(dir) {
-  return [dirField.init(() => dir), previewPlugin, linkClicks]
+  return [dirField.init(() => dir), tableField, tableKeys, previewPlugin, linkClicks]
 }

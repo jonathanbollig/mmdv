@@ -1,4 +1,4 @@
-import { EditorState } from '@codemirror/state'
+import { EditorState, EditorSelection } from '@codemirror/state'
 import { EditorView, keymap, drawSelection } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
@@ -7,6 +7,26 @@ import { languages } from '@codemirror/language-data'
 import { indentUnit, codeFolding, foldKeymap } from '@codemirror/language'
 import { theme, highlighting } from './theme.js'
 import { livePreview, baseDir, foldFrontmatter, foldPlaceholder } from './livepreview.js'
+import { Highlight, MathSyntax } from './syntax.js'
+
+// Typing one of these with text selected wraps the selection instead of
+// replacing it. The selection stays on the inner text, so pressing `*` twice
+// makes bold, `~` twice strikethrough and `=` twice highlight.
+const wrapPairs = {
+  '`': '`', '(': ')', '[': ']', '{': '}', '"': '"', "'": "'",
+  '*': '*', '_': '_', '~': '~', '=': '=', '$': '$', '<': '>',
+}
+
+const wrapSelection = EditorView.inputHandler.of((view, from, to, text) => {
+  const close = wrapPairs[text]
+  const { state } = view
+  if (!close || state.selection.ranges.some(r => r.empty)) return false
+  view.dispatch(state.changeByRange(range => ({
+    changes: [{ from: range.from, insert: text }, { from: range.to, insert: close }],
+    range: EditorSelection.range(range.anchor + text.length, range.head + text.length),
+  })), { scrollIntoView: true, userEvent: 'input.type' })
+  return true
+})
 
 // Ctrl+Shift+Q (or the context menu): turn the selected lines into a blockquote,
 // or unquote them if they all are quoted already. Blank lines get a bare `>`
@@ -36,27 +56,61 @@ function toggleQuote(view) {
   return true
 }
 
+// Pasting an image (screenshot, copied picture) saves it next to the file and
+// inserts a link. Clipboards that also carry text (e.g. spreadsheet cells) paste the text.
+function imagePaste(ensureSaved) {
+  return EditorView.domEventHandlers({
+    paste(event, view) {
+      const data = event.clipboardData
+      const image = [...data.files].find(f => f.type.startsWith('image/'))
+      if (!image || data.types.includes('text/plain')) return false
+      event.preventDefault()
+      ;(async () => {
+        if (!await ensureSaved(view)) return
+        const ext = image.type.split('/')[1].replace('jpeg', 'jpg').replace(/\+.*/, '')
+        const name = await window.mmdv.saveImage(await image.arrayBuffer(), ext)
+        if (!name) return
+        const insert = `![](${encodeURI(name)})`
+        view.dispatch(view.state.replaceSelection(insert), { scrollIntoView: true, userEvent: 'input.paste' })
+      })()
+      return true
+    },
+  })
+}
+
 async function main() {
   const file = await window.mmdv.open()
+  let hasPath = !!file.filePath
   const crlf = file.text.includes('\r\n')
   let savedDoc = null
 
-  const save = async view => {
-    let text = view.state.doc.toString()
+  let wasDirty = false
+  const setDirty = dirty => { if (dirty !== wasDirty) window.mmdv.setDirty(wasDirty = dirty) }
+
+  let autoSaveTimer = null
+  const save = async (view, auto = false) => {
+    clearTimeout(autoSaveTimer)
+    // Remember what was written: typing may continue while the save is in flight.
+    const doc = view.state.doc
+    let text = doc.toString()
     if (crlf) text = text.replace(/\n/g, '\r\n')
-    const res = await window.mmdv.save(text)
+    const res = await window.mmdv.save(text, auto)
     if (!res) return false
-    savedDoc = view.state.doc
+    savedDoc = doc
+    hasPath = true
     view.dispatch({ effects: baseDir.of(res.dir) })
-    window.mmdv.setDirty(false)
+    setDirty(!view.state.doc.eq(savedDoc))
     return true
   }
 
-  let wasDirty = false
+  // Auto save a second after the last edit. Untitled files wait for Ctrl+S,
+  // so the save dialog never pops up by itself.
   const trackDirty = EditorView.updateListener.of(update => {
     if (!update.docChanged) return
     const dirty = !update.state.doc.eq(savedDoc)
-    if (dirty !== wasDirty) window.mmdv.setDirty(wasDirty = dirty)
+    setDirty(dirty)
+    clearTimeout(autoSaveTimer)
+    if (dirty && hasPath) autoSaveTimer = setTimeout(() => save(update.view, true), 1000)
   })
 
   const view = new EditorView({
@@ -75,10 +129,13 @@ async function main() {
           { key: 'Mod-Shift-q', run: toggleQuote },
           ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap, indentWithTab,
         ]),
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [Highlight, MathSyntax] }),
         theme,
         highlighting,
         livePreview(file.dir),
+        wrapSelection,
+        // An untitled file has no folder yet: save it first so the image has a home.
+        imagePaste(view => hasPath || save(view)),
         trackDirty,
       ],
     }),
@@ -104,6 +161,7 @@ async function main() {
     })
     savedDoc = tr.newDoc
     view.dispatch(tr)
+    setDirty(false)
   })
 
   window.mmdv.onSaveRequest(() => save(view))

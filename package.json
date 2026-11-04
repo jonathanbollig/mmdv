@@ -10,7 +10,7 @@
     "url": "git+https://github.com/jonathanbollig/mmdv.git"
   },
   "scripts": {
-    "build": "esbuild src/editor.js --bundle --minify --format=iife --target=chrome140 --outfile=dist/renderer.js",
+    "build": "esbuild src/editor.js --bundle --minify --format=iife --target=chrome140 --outfile=dist/renderer.js --loader:.woff2=file --loader:.woff=file --loader:.ttf=file --asset-names=fonts/[name]",
     "start": "npm run build && electron44 ."
   },
   "type": "commonjs",
@@ -22,7 +22,8 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
-    "@lezer/highlight": "^1.2.5"
+    "@lezer/highlight": "^1.2.5",
+    "katex": "^0.19.1"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
