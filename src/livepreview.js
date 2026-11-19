@@ -338,10 +338,13 @@ function tableSpec(state, table, dir) {
 
 function resolveImage(src, dir) {
   src = src.replace(/^<|>$/g, '')
-  if (/^[a-z][a-z0-9+.-]*:/i.test(src)) return src
+  if (/^[a-z][a-z0-9+.-]+:/i.test(src)) return src // URL scheme; a single letter is a drive
   try { src = decodeURI(src) } catch {}
-  const abs = src.startsWith('/') ? src : `${dir}/${src}`
-  return 'file://' + abs.split('/').map(encodeURIComponent).join('/')
+  // Windows: dir is like C:\notes; use forward slashes and keep the drive letter unencoded.
+  if (/^[a-z]:/i.test(dir)) { src = src.replace(/\\/g, '/'); dir = dir.replace(/\\/g, '/') }
+  const abs = src.startsWith('/') || /^[a-z]:\//i.test(src) ? src : `${dir}/${src}`
+  return 'file://' + (abs.startsWith('/') ? '' : '/') +
+    abs.split('/').map(s => /^[a-z]:$/i.test(s) ? s : encodeURIComponent(s)).join('/')
 }
 
 // End of a YAML frontmatter block at the top of the document, or 0.
