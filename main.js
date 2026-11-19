@@ -58,6 +58,8 @@ function createWindow(filePath) {
       { type: 'separator' },
       { label: 'Toggle Quote', accelerator: 'Ctrl+Shift+Q', registerAccelerator: false,
         click: () => win.webContents.send('toggle-quote') },
+      { type: 'separator' },
+      { label: 'Open CSS Snippets Folder', click: openOwnSnippets },
     ]).popup({ window: win })
   })
 
@@ -128,7 +130,7 @@ function findVault(filePath) {
 }
 
 // The vault's enabled CSS snippets, concatenated. Obsidian-only selectors simply match nothing.
-function snippetCSS(filePath) {
+function vaultCSS(filePath) {
   const vault = findVault(filePath)
   if (!vault) return ''
   const dir = path.join(vault, '.obsidian')
@@ -139,6 +141,26 @@ function snippetCSS(filePath) {
     }).join('\n')
   } catch { return '' }
 }
+
+// mmdv's own snippets, for use without Obsidian: every .css file in
+// %APPDATA%\mmdv\snippets (Windows) or ~/.config/mmdv/snippets (Linux).
+const ownSnippetsDir = () => path.join(app.getPath('userData'), 'snippets')
+
+function ownCSS() {
+  const dir = ownSnippetsDir()
+  try {
+    return fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.css')).sort()
+      .map(f => { try { return fs.readFileSync(path.join(dir, f), 'utf8') } catch { return '' } }).join('\n')
+  } catch { return '' }
+}
+
+function openOwnSnippets() {
+  fs.mkdirSync(ownSnippetsDir(), { recursive: true })
+  shell.openPath(ownSnippetsDir())
+}
+
+// Own snippets last, so they win over the vault's.
+const snippetCSS = filePath => vaultCSS(filePath) + '\n' + ownCSS()
 
 const senderWin = e => BrowserWindow.fromWebContents(e.sender)
 
