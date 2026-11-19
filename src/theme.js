@@ -73,7 +73,17 @@ export const theme = EditorView.theme({
   '.cm-frontmatter': { color: c.dim, fontFamily: mono, fontSize: '0.8em' },
   '.cm-foldPlaceholder': { backgroundColor: c.code, border: 'none', color: c.dim, fontFamily: sans, fontSize: '0.85em', padding: '0 8px', margin: '0 6px', borderRadius: '4px' },
   '.cm-table': { fontFamily: mono, fontSize: '0.9em' },
-  '.cm-table-widget': { overflowX: 'auto', padding: '6px 4px', cursor: 'text' },
+  // Wide tables grow past the text column up to the window width, centred on the
+  // column, and scroll sideways beyond that. Narrow ones stay left-aligned in it.
+  // Words never break inside a cell (the editor's overflow-wrap: anywhere would
+  // let columns shrink to one letter); long cells wrap at --table-cell-width.
+  '.cm-table-widget': {
+    overflowX: 'auto', padding: '6px 4px', cursor: 'text',
+    width: 'max-content', minWidth: 'min(100%, calc(100vw - 64px))', maxWidth: 'calc(100vw - 64px)',
+    position: 'relative', left: '50%', transform: 'translateX(-50%)',
+    overflowWrap: 'normal', wordBreak: 'normal', whiteSpace: 'normal',
+  },
+  '.cm-table-cell': { maxWidth: 'var(--table-cell-width, 28em)' },
   '.cm-table-widget table': { borderCollapse: 'collapse', fontSize: '0.95em' },
   '.cm-table-widget th, .cm-table-widget td': { border: '1px solid #3c3c46', padding: '4px 12px', textAlign: 'left', verticalAlign: 'top' },
   '.cm-table-widget th': { color: c.bright, fontWeight: '600', backgroundColor: c.code },

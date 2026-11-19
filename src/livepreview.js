@@ -231,7 +231,9 @@ class TableWidget extends WidgetType {
         const td = tr.appendChild(document.createElement(i ? 'td' : 'th'))
         if (this.spec.align[col]) td.style.textAlign = this.spec.align[col]
         td.dataset.offset = cell.offset
-        appendInline(td, cell.content)
+        const box = td.appendChild(document.createElement('div'))
+        box.className = 'cm-table-cell'
+        appendInline(box, cell.content)
       })
     })
     wrap.addEventListener('mousedown', e => {
