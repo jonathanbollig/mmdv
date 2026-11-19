@@ -27,6 +27,7 @@ It's about 900 lines of code: [CodeMirror 6](https://codemirror.net/) for the ed
 - Reloads the file when it changes on disk (asks first if you have unsaved edits)
 - Zoom with Ctrl +/- (Ctrl+0 resets), Ctrl+mouse wheel or touchpad pinch
 - Dark theme with a centred, readable line width
+- Uses your Obsidian CSS snippets: the ones enabled in the vault the file is in (or else the vault Obsidian last had open) are loaded. The theme uses Obsidian's CSS variable and class names (`--h2-color`, `--h2-size`, `--file-line-width`, `--bold-weight`, `.cm-strong`, `.cm-inline-code`, ...), so snippets that set those apply; Obsidian-only parts are ignored. Snippets are read when a window opens
 
 ## Requirements
 

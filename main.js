@@ -114,6 +114,32 @@ function unwatch(win) {
   win.mmdv.unwatch = null
 }
 
+// The Obsidian vault the file lives in, else the vault Obsidian last had open,
+// so loose files look like notes too.
+function findVault(filePath) {
+  for (let dir = filePath && path.dirname(filePath); dir && dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, '.obsidian', 'appearance.json'))) return dir
+  }
+  try {
+    const { vaults } = JSON.parse(fs.readFileSync(path.join(app.getPath('appData'), 'obsidian', 'obsidian.json'), 'utf8'))
+    const list = Object.values(vaults).sort((a, b) => (b.open - a.open) || (b.ts - a.ts))
+    return list[0]?.path ?? null
+  } catch { return null }
+}
+
+// The vault's enabled CSS snippets, concatenated. Obsidian-only selectors simply match nothing.
+function snippetCSS(filePath) {
+  const vault = findVault(filePath)
+  if (!vault) return ''
+  const dir = path.join(vault, '.obsidian')
+  try {
+    const { enabledCssSnippets = [] } = JSON.parse(fs.readFileSync(path.join(dir, 'appearance.json'), 'utf8'))
+    return enabledCssSnippets.map(name => {
+      try { return fs.readFileSync(path.join(dir, 'snippets', `${name}.css`), 'utf8') } catch { return '' }
+    }).join('\n')
+  } catch { return '' }
+}
+
 const senderWin = e => BrowserWindow.fromWebContents(e.sender)
 
 ipcMain.handle('open', e => {
@@ -126,7 +152,7 @@ ipcMain.handle('open', e => {
   }
   win.mmdv.diskText = text
   watch(win)
-  return { text, filePath, dir: filePath ? path.dirname(filePath) : process.cwd() }
+  return { text, filePath, dir: filePath ? path.dirname(filePath) : process.cwd(), css: snippetCSS(filePath) }
 })
 
 ipcMain.handle('save', async (e, text, auto) => {

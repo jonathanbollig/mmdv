@@ -1,26 +1,28 @@
 import { EditorView } from '@codemirror/view'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { tags as t } from '@lezer/highlight'
+import { tags as t, tagHighlighter } from '@lezer/highlight'
 
+// Colours that Obsidian CSS snippets may override are CSS variables, named as
+// in Obsidian and given their defaults in style.css.
 const c = {
-  bg: '#1e1e23',
+  bg: 'var(--background-primary)',
   panel: '#26262c',
-  code: 'rgba(255, 255, 255, 0.045)', // translucent so the selection layer shows through
-  fg: '#d3d3db',
+  code: 'var(--code-background)',
+  fg: 'var(--text-normal)',
   bright: '#ececf2',
   dim: '#6e7086',
-  accent: '#8c9cf2',
-  link: '#8ab4f8',
+  accent: 'var(--text-accent)',
+  link: 'var(--link-color)',
   selection: '#3a3f5c',
 }
 const sans = '"Noto Sans", system-ui, sans-serif'
 const mono = '"Noto Sans Mono", monospace'
 
 export const theme = EditorView.theme({
-  '&': { height: '100vh', color: c.fg, backgroundColor: c.bg, fontSize: '16px' },
+  '&': { height: '100vh', color: c.fg, backgroundColor: c.bg, fontSize: 'var(--font-text-size)' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: sans, lineHeight: '1.6' },
-  '.cm-content': { maxWidth: '760px', margin: '0 auto', padding: '40px 24px 40vh', caretColor: c.bright },
+  '.cm-content': { maxWidth: 'var(--file-line-width)', margin: '0 auto', padding: '40px 24px 40vh', caretColor: c.bright },
   '.cm-line': { padding: '0 4px' },
   '.cm-cursor, .cm-dropCursor': { borderLeft: `2px solid ${c.bright}` },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
@@ -29,13 +31,9 @@ export const theme = EditorView.theme({
   '.cm-searchMatch': { backgroundColor: '#5a4b1e', outline: '1px solid #8a7430' },
   '.cm-searchMatch-selected': { backgroundColor: '#7a6420' },
 
-  '.cm-h': { color: c.bright, fontWeight: '600', lineHeight: '1.3', paddingTop: '0.5em', paddingBottom: '0.15em' },
-  '.cm-h1': { fontSize: '1.9em' },
-  '.cm-h2': { fontSize: '1.55em' },
-  '.cm-h3': { fontSize: '1.3em' },
-  '.cm-h4': { fontSize: '1.15em' },
-  '.cm-h5': { fontSize: '1.05em' },
-  '.cm-h6': { fontSize: '1em', color: c.fg },
+  '.cm-h': { lineHeight: '1.3', paddingTop: '0.5em', paddingBottom: '0.15em' },
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6].map(n => [`.cm-h${n}`,
+    { fontSize: `var(--h${n}-size)`, color: `var(--h${n}-color)`, fontWeight: `var(--h${n}-weight)` }])),
   '.cm-fold-toggle': {
     position: 'absolute', transform: 'translateX(-130%)', display: 'inline-flex', alignItems: 'center', height: '1.3em',
     color: c.dim, cursor: 'pointer', opacity: '0', transition: 'opacity 0.15s',
@@ -45,20 +43,20 @@ export const theme = EditorView.theme({
   '.cm-line:hover .cm-fold-toggle, .cm-fold-toggle.cm-folded': { opacity: '1' },
   '.cm-fold-toggle:hover': { color: c.fg },
 
-  '.cm-link': { color: c.link, textDecoration: 'underline', textDecorationColor: '#8ab4f866', textUnderlineOffset: '3px' },
-  '.cm-highlight': { backgroundColor: 'rgba(255, 208, 0, 0.28)', color: c.bright, borderRadius: '2px' },
+  '.cm-link': { color: c.link, textDecoration: 'underline', textDecorationColor: 'color-mix(in srgb, currentColor 40%, transparent)', textUnderlineOffset: '3px' },
+  '.cm-highlight': { backgroundColor: 'var(--text-highlight-bg)', color: c.bright, borderRadius: '2px' },
   '.cm-math-src': { fontFamily: mono, fontSize: '0.9em' },
   '.cm-math': { cursor: 'text' },
   '.cm-math-block': { padding: '4px 0', overflowX: 'auto', cursor: 'text' },
   '.cm-math-block .katex-display': { margin: '0.4em 0' },
   '.cm-math-block .katex-error, .cm-math .katex-error': { fontFamily: mono, fontSize: '0.88em' },
   '.cm-table-widget mark': { backgroundColor: 'rgba(255, 208, 0, 0.28)', color: c.bright, borderRadius: '2px' },
-  '.cm-inline-code': { fontFamily: mono, fontSize: '0.88em', backgroundColor: c.code, borderRadius: '4px', padding: '0.1em 0.3em' },
+  '.cm-inline-code': { color: 'var(--code-normal, currentColor)', fontFamily: mono, fontSize: '0.88em', backgroundColor: c.code, borderRadius: '4px', padding: '0.1em 0.3em' },
   '.cm-bullet': { color: c.accent, fontWeight: 'bold' },
   '.cm-list-number': { color: c.accent },
   '.cm-task-checkbox': { margin: '0 0.4em 0 0', verticalAlign: '-0.1em', width: '1em', height: '1em', cursor: 'pointer', accentColor: c.accent },
   '.cm-task-done': { color: c.dim, textDecoration: 'line-through' },
-  '.cm-quote': { borderLeft: `3px solid ${c.accent}`, paddingLeft: '16px', color: '#b8b8c6' },
+  '.cm-quote': { borderLeft: '3px solid var(--blockquote-border-color)', paddingLeft: '16px', color: 'var(--blockquote-color)' },
   '.cm-hr': {
     backgroundImage: `linear-gradient(${c.dim}, ${c.dim})`,
     backgroundSize: '100% 1px', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
@@ -101,17 +99,23 @@ export const theme = EditorView.theme({
   '.cm-panel.cm-search label': { color: c.fg },
 }, { dark: true })
 
-export const highlighting = syntaxHighlighting(HighlightStyle.define([
+// Obsidian's class names on top of the generated ones, for CSS snippets.
+const obsidianClasses = syntaxHighlighting(tagHighlighter([
+  { tag: t.strong, class: 'cm-strong' },
+  { tag: t.emphasis, class: 'cm-em' },
+  { tag: t.strikethrough, class: 'cm-strikethrough' },
+]))
+
+export const highlighting = [obsidianClasses, syntaxHighlighting(HighlightStyle.define([
   // markdown
-  { tag: t.heading, color: c.bright, fontWeight: '600' },
-  { tag: t.emphasis, fontStyle: 'italic' },
-  { tag: t.strong, fontWeight: 'bold', color: c.bright },
+  { tag: t.emphasis, fontStyle: 'italic', color: 'var(--italic-color, currentColor)' },
+  { tag: t.strong, fontWeight: 'var(--bold-weight)', color: 'var(--bold-color)' },
   { tag: t.strikethrough, textDecoration: 'line-through' },
   { tag: t.link, color: c.link },
   { tag: t.url, color: c.dim },
   { tag: [t.processingInstruction, t.contentSeparator], color: c.dim },
   { tag: t.monospace, fontFamily: mono },
-  { tag: t.quote, color: '#b8b8c6' },
+  { tag: t.quote, color: 'var(--blockquote-color)' },
   // code
   { tag: t.comment, color: c.dim, fontStyle: 'italic' },
   { tag: [t.keyword, t.operatorKeyword, t.modifier], color: '#c792ea' },
@@ -123,4 +127,4 @@ export const highlighting = syntaxHighlighting(HighlightStyle.define([
   { tag: [t.operator, t.punctuation], color: '#89ddff' },
   { tag: [t.meta, t.labelName], color: '#a0a4c0' },
   { tag: t.invalid, color: '#ff5370' },
-]))
+]))]

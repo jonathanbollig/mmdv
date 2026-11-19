@@ -5,8 +5,45 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: #1e1e23;
+  background: var(--background-primary);
   overflow: hidden;
+}
+
+/* Theme defaults, under Obsidian's variable names so the vault's CSS snippets
+   (loaded after this file) can override them. */
+:root {
+  --background-primary: #1e1e23;
+  --text-normal: #d3d3db;
+  --text-accent: #8c9cf2;
+  --font-text-size: 16px;
+  --file-line-width: 760px;
+
+  --h1-size: 1.9em;
+  --h2-size: 1.55em;
+  --h3-size: 1.3em;
+  --h4-size: 1.15em;
+  --h5-size: 1.05em;
+  --h6-size: 1em;
+  --h1-color: #ececf2;
+  --h2-color: #ececf2;
+  --h3-color: #ececf2;
+  --h4-color: #ececf2;
+  --h5-color: #ececf2;
+  --h6-color: var(--text-normal);
+  --h1-weight: 600;
+  --h2-weight: 600;
+  --h3-weight: 600;
+  --h4-weight: 600;
+  --h5-weight: 600;
+  --h6-weight: 600;
+
+  --bold-weight: bold;
+  --bold-color: #ececf2;
+  --link-color: #8ab4f8;
+  --code-background: rgba(255, 255, 255, 0.045); /* translucent so the selection layer shows through */
+  --text-highlight-bg: rgba(255, 208, 0, 0.28);
+  --blockquote-border-color: var(--text-accent);
+  --blockquote-color: #b8b8c6;
 }
 
 .cm-image, .cm-table-image {

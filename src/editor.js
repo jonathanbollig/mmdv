@@ -80,6 +80,12 @@ function imagePaste(ensureSaved) {
 
 async function main() {
   const file = await window.mmdv.open()
+  // Obsidian CSS snippets go last so they override the defaults in style.css.
+  document.body.classList.add('theme-dark')
+  const snippets = document.createElement('style')
+  snippets.textContent = file.css
+  document.head.append(snippets)
+
   let hasPath = !!file.filePath
   const crlf = file.text.includes('\r\n')
   let savedDoc = null
